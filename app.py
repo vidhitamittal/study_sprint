@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 import re
 
-genai.configure(api_key="AIzaSyAMuNAtfBC-9fwqiylyqPLN8iO6KR2HJbU") # will need to be replaced with your actual API key
+genai.configure(api_key="yourAPIkey") # will need to be replaced with your actual API key
 model = genai.GenerativeModel('gemini-3-flash-preview') # use the appropriate google gen ai model
 
 st.set_page_config(page_title="AI Study Buddy", page_icon="🎓", layout="wide")
