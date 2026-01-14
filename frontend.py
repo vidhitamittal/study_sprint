@@ -2,7 +2,8 @@ import streamlit as st
 import google.generativeai as genai
 from backend import StudyBackend
 
-genai.configure(api_key="yourAPIkey") #will need to be replaced with your actual key
+api_key = st.secrets["GOOGLE_API_KEY"]
+genai.configure(api_key=api_key)
 model = genai.GenerativeModel('gemini-3-flash-preview')
 
 def render_flashcards(flashcards):
