@@ -13,7 +13,7 @@
 
 ## 🛠️ Tech Stack
 - **Frontend:** [Streamlit](https://streamlit.io/)
-- **LLM:** [Google Gemini 1.5 Flash](https://ai.google.dev/)
+- **LLM:** [Google Gemini 3 Flash](https://ai.google.dev/)
 - **PDF Processing:** `pypdf` (extraction) and `fpdf` (generation)
 
 ## 🚀 Getting Started
