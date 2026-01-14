@@ -5,8 +5,9 @@ from fpdf import FPDF
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
+import re
 
-genai.configure(api_key="youAPIkey") # will need to be replaced with your actual API key
+genai.configure(api_key="AIzaSyAMuNAtfBC-9fwqiylyqPLN8iO6KR2HJbU") # will need to be replaced with your actual API key
 model = genai.GenerativeModel('gemini-3-flash-preview') # use the appropriate google gen ai model
 
 st.set_page_config(page_title="AI Study Buddy", page_icon="🎓", layout="wide")
@@ -83,7 +84,171 @@ def fetch_website_content(url):
         raise Exception(str(e))
     except Exception as e:
         raise Exception(f"Error fetching website: {str(e)}")
+    
+def generate_study_guide(content, guide_type):
+    """Generate study guide based on selected type"""
+    prompts = {
+        "📋 Comprehensive Summary": f"""Create a comprehensive study guide from the following content. Include:
+1. Executive Summary (2-3 sentences)
+2. Main Topics with detailed explanations
+3. Key Concepts
+4. Important Details
+5. Conclusion
 
+Content: {content[:15000]}""",
+        
+        "🎴 Flashcards": f"""Create flashcards from the following content. Format each flashcard EXACTLY as follows:
+
+**Front:** [Question or Term]
+**Back:** [Answer or Definition]
+
+**Front:** [Question or Term]
+**Back:** [Answer or Definition]
+
+Generate 15-20 flashcards covering the most important concepts. Make sure each flashcard follows the exact format above.
+
+Content: {content[:15000]}""",
+        
+        "Practice Questions": f"""Create practice questions from the following content. Include:
+1. 10 Multiple Choice Questions (with 4 options each and correct answer marked)
+2. 5 Short Answer Questions (with sample answers)
+3. 2 Essay Questions (with key points to include)
+
+Content: {content[:15000]}""",
+        
+        "🔑 Key Terms & Definitions": f"""Extract and define key terms from the following content. For each term, provide:
+1. The term
+2. Definition
+3. Context/Example from the content
+
+List at least 20-25 key terms.
+
+Content: {content[:15000]}""",
+        
+        "📊 All-in-One": f"""Create a complete study guide from the following content including:
+1. High-level summary (2-3 paragraphs)
+2. Key bullet points (10-15 points)
+3. Important terms and definitions (10-15 terms)
+4. Practice questions (5 questions with answers)
+5. Study tips
+
+Content: {content[:15000]}"""
+    }
+    
+    return prompts.get(guide_type, prompts["📊 All-in-One"])
+
+import re
+
+def parse_flashcards(text):
+    """Parse flashcard text into front/back pairs"""
+    flashcards = []
+    
+    # Try to find patterns like "Front:" and "Back:"
+    pattern = r'\*\*Front:\*\*\s*(.+?)\s*\*\*Back:\*\*\s*(.+?)(?=\*\*Front:|$)'
+    matches = re.findall(pattern, text, re.DOTALL | re.IGNORECASE)
+    
+    if matches:
+        for front, back in matches:
+            flashcards.append({
+                'front': front.strip(),
+                'back': back.strip()
+            })
+    else:
+        # Fallback: try to split by lines and look for Q/A patterns
+        lines = text.split('\n')
+        current_front = None
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            if 'front:' in line.lower() or 'question:' in line.lower() or 'term:' in line.lower():
+                current_front = re.sub(r'^(front|question|term):\s*', '', line, flags=re.IGNORECASE).strip()
+            elif 'back:' in line.lower() or 'answer:' in line.lower() or 'definition:' in line.lower():
+                if current_front:
+                    back = re.sub(r'^(back|answer|definition):\s*', '', line, flags=re.IGNORECASE).strip()
+                    flashcards.append({'front': current_front, 'back': back})
+                    current_front = None
+    
+    return flashcards
+
+def display_flashcards(flashcards):
+    """Display flashcards in an interactive card format"""
+    if not flashcards:
+        st.warning("Could not parse flashcards. Showing raw text instead.")
+        return False
+    
+    st.markdown("### 🎴 Interactive Flashcards")
+    st.markdown("💡 *Click on a card to flip it and see the answer*")
+    
+    # Initialize session state for flashcard visibility
+    if 'flashcard_states' not in st.session_state:
+        st.session_state.flashcard_states = {}
+    
+    # Display flashcards in a grid
+    num_cols = 2
+    for i in range(0, len(flashcards), num_cols):
+        cols = st.columns(num_cols)
+        for j, col in enumerate(cols):
+            if i + j < len(flashcards):
+                card = flashcards[i + j]
+                card_id = f"card_{i+j}"
+                
+                # Initialize state for this card
+                if card_id not in st.session_state.flashcard_states:
+                    st.session_state.flashcard_states[card_id] = False
+                
+                with col:
+                    # Create clickable card
+                    is_flipped = st.session_state.flashcard_states[card_id]
+                    
+                    # Card styling
+                    card_html = f"""
+                    <div style="
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        border-radius: 15px;
+                        padding: 30px;
+                        margin: 10px 0;
+                        min-height: 200px;
+                        box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+                        cursor: pointer;
+                        transition: transform 0.3s;
+                        color: white;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        text-align: center;
+                    ">
+                        <div style="font-size: 18px; font-weight: 500;">
+                            {card['front'] if not is_flipped else card['back']}
+                        </div>
+                    </div>
+                    """
+                    st.markdown(card_html, unsafe_allow_html=True)
+                    
+                    # Flip button
+                    if st.button(f"🔄 Flip Card {i+j+1}", key=f"flip_{i+j}", use_container_width=True):
+                        st.session_state.flashcard_states[card_id] = not st.session_state.flashcard_states[card_id]
+                        st.rerun()
+                    
+                    # Show which side is visible
+                    side_indicator = "❓ Question" if not is_flipped else "✅ Answer"
+                    st.caption(f"{side_indicator} | Card {i+j+1} of {len(flashcards)}")
+    
+    return True
+
+
+# Check if we have flashcards in session state (from a previous generation)
+if 'flashcards' in st.session_state and 'study_guide_text' in st.session_state:
+    st.title("🎓 AI Study Buddy")
+    
+    if display_flashcards(st.session_state.flashcards):
+        with st.expander("📄 View Raw Text"):
+            st.write(st.session_state.study_guide_text)
+    
+    st.markdown("---")
+    st.markdown("### Generate New Study Guide")
+    
+    
 st.title("🎓 AI Study Buddy")
 st.markdown("### 📥 Step 1: Provide your content")
 
@@ -100,7 +265,20 @@ with col3:
     st.info("Option C: Enter Website URL")
     url_input = st.text_input("Enter website URL:", placeholder="https://example.com/article", key="url_input")
 
+st.markdown("### ⚙️ Step 2: Customize your study guide")
+study_guide_type = st.selectbox(
+    "Choose study guide format:",
+    ["📋 Comprehensive Summary", "🎴 Flashcards", "❓Practice Questions", "🔑 Key Terms & Definitions", "📊 All-in-One"],
+    help="Select the format that best suits your study needs"
+)
+
 if st.button("🚀 Generate Study Guide", use_container_width=True):
+    # Clear previous flashcards when generating new ones
+    if 'flashcards' in st.session_state:
+        del st.session_state.flashcards
+    if 'flashcard_states' in st.session_state:
+        del st.session_state.flashcard_states
+    
     final_text = ""
     if uploaded_file:
         final_text = extract_pdf_text(uploaded_file)
@@ -117,24 +295,56 @@ if st.button("🚀 Generate Study Guide", use_container_width=True):
             final_text = ""
     
     if final_text:
-        with st.spinner('Reading your notes...'):
-            prompt = f"Summarize the following notes into a high-level summary, key bullet points, and 3 test questions: {final_text[:15000]}"
+        with st.spinner(f'Generating {study_guide_type}...'):
+            prompt = generate_study_guide(final_text, study_guide_type)
             
             try:
                 response = model.generate_content(prompt)
                 study_guide_text = response.text
                 
                 st.success("Guide Generated!")
-                st.markdown("### 📝 Your Custom Study Guide")
-                st.write(study_guide_text)
                 
-                pdf_data = create_pdf(study_guide_text)
-                st.download_button(
-                    label="📥 Download Guide as PDF",
-                    data=pdf_data,
-                    file_name="study_guide.pdf",
-                    mime="application/pdf"
-                )
+                # Special handling for flashcards
+                if study_guide_type == "🎴 Flashcards":
+                    # Store flashcards in session state so they persist across reruns
+                    flashcards = parse_flashcards(study_guide_text)
+                    st.session_state.flashcards = flashcards
+                    st.session_state.study_guide_text = study_guide_text
+                    
+                    if display_flashcards(flashcards):
+                        # Show raw text in expander for reference
+                        with st.expander("📄 View Raw Text"):
+                            st.write(study_guide_text)
+                    else:
+                        # If parsing failed, show raw text
+                        st.markdown(f"### 📝 Your {study_guide_type}")
+                        st.write(study_guide_text)
+                else:
+                    st.markdown(f"### 📝 Your {study_guide_type}")
+                    st.write(study_guide_text)
+                
+                # Add export options
+                col_download1, col_download2 = st.columns(2)
+                
+                with col_download1:
+                    pdf_data = create_pdf(study_guide_text)
+                    st.download_button(
+                        label="📥 Download as PDF",
+                        data=pdf_data,
+                        file_name=f"study_guide_{study_guide_type.replace(' ', '_').lower()}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+                
+                with col_download2:
+                    txt_data = study_guide_text.encode('utf-8')
+                    st.download_button(
+                        label="📄 Download as TXT",
+                        data=txt_data,
+                        file_name=f"study_guide_{study_guide_type.replace(' ', '_').lower()}.txt",
+                        mime="text/plain",
+                        use_container_width=True
+                    )
             except Exception as e:
                 st.error(f"Error: {e}")
     else:
